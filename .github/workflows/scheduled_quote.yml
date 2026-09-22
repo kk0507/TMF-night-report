@@ -1,0 +1,38 @@
+name: 微台定時報價
+
+on:
+  schedule:
+    # 時間都是UTC，台灣時間 = UTC+8
+    - cron: '50 5 * * 1-5'   # 週一~五 13:50 台灣時間 -> 日盤收盤(13:45)後
+    - cron: '50 12 * * 0-4'  # 週日~四晚上 20:50 台灣時間 -> 夜盤中
+    - cron: '5 21 * * 0-4'   # 週日~四晚上(隔天) 05:05 台灣時間 -> 夜盤收盤(05:00)後
+  workflow_dispatch:
+    inputs:
+      label:
+        description: '要送哪一種報價'
+        required: true
+        default: 'day_close'
+        type: choice
+        options: [day_close, night_check, night_close]
+
+jobs:
+  quote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: 判斷這次要送哪一種報價
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "50 5 * * 1-5") echo "label=day_close" >> "$GITHUB_OUTPUT" ;;
+            "50 12 * * 0-4") echo "label=night_check" >> "$GITHUB_OUTPUT" ;;
+            "5 21 * * 0-4") echo "label=night_close" >> "$GITHUB_OUTPUT" ;;
+            *) echo "label=${{ github.event.inputs.label }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - run: python scheduled_quote.py ${{ steps.pick.outputs.label }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

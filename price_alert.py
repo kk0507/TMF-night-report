@@ -8,55 +8,13 @@
 """
 import json
 import os
-from datetime import datetime, timedelta, timezone
 
 import requests
 
+from taifex_quote import get_live_price
+
 DISCORD_WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
-MIS_URL = "https://mis.taifex.com.tw/futures/api/getQuoteList"
 ALERTS_FILE = os.path.join(os.path.dirname(__file__), "alerts.json")
-TAIPEI = timezone(timedelta(hours=8))
-STALE_MINUTES = 10  # 資料時間戳跟現在差超過這個，視為盤已休息，不判斷
-
-
-def fetch_session(market_type):
-    resp = requests.post(
-        MIS_URL,
-        json={
-            "MarketType": market_type,
-            "SymbolType": "F",
-            "KindID": "1",
-            "CID": "TMF",
-            "ExpireMonth": "",
-            "rowSize": "全部",
-            "PageNo": "",
-            "SortColumn": "",
-            "AscDesc": "A",
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()["RtData"]["QuoteList"]
-    contracts = [q for q in data if q["SymbolID"].endswith(("-F", "-M")) and q["CTotalVolume"]]
-    if not contracts:
-        return None
-    near = max(contracts, key=lambda q: int(q["CTotalVolume"]))
-    if not near["CLastPrice"] or not near["CTime"]:
-        return None
-    ts = datetime.strptime(near["CDate"] + near["CTime"], "%Y%m%d%H%M%S").replace(tzinfo=TAIPEI)
-    return {"price": float(near["CLastPrice"]), "contract": near["SymbolID"], "ts": ts}
-
-
-def get_live_price():
-    """兩個session都查，取時間戳比較新的那個當現在的價格，太舊代表現在沒開盤。"""
-    candidates = [s for s in (fetch_session("0"), fetch_session("1")) if s]
-    if not candidates:
-        return None
-    latest = max(candidates, key=lambda s: s["ts"])
-    now = datetime.now(TAIPEI)
-    if now - latest["ts"] > timedelta(minutes=STALE_MINUTES):
-        return None
-    return latest
 
 
 def send_discord(text):
