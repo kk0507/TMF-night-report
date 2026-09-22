@@ -1,11 +1,1 @@
-[
-  {
-    "id": "e2e-test",
-    "price": 48282.0,
-    "last_side": -1,
-    "note": "部署測試",
-    "fired": true,
-    "fired_at": "2026-09-22T18:12:34+08:00",
-    "fired_price": 48311.0
-  }
-]
+[]
