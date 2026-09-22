@@ -114,6 +114,17 @@ def get_institutional_signal(days=10):
     return {"date": latest["date"], "net_position": net_latest, "change": net_latest - net_prev}
 
 
+def sign_emoji(value):
+    """台股慣例：漲紅跌綠。用emoji而不是ANSI/diff色塊，因為手機版Discord兩者都顯示不正常。"""
+    if value is None:
+        return ""
+    if value > 0:
+        return "🔴"
+    if value < 0:
+        return "🟢"
+    return "⚪"
+
+
 def send_discord(text):
     resp = requests.post(DISCORD_WEBHOOK_URL, json={"content": text}, timeout=15)
     resp.raise_for_status()
@@ -157,19 +168,23 @@ def main():
     lines = [f"**微台(TMF)夜盤快報**  {latest['date']}  合約{latest['contract']}"]
     lines.append(f"收盤: {closes[-1]:,.0f}")
     if night_ret is not None:
-        lines.append(f"昨晚夜盤: {night_ret:+.2f}%")
+        lines.append(f"{sign_emoji(night_ret)} 昨晚夜盤: {night_ret:+.2f}%")
     if cur_ret3 is not None and pct3 is not None:
-        lines.append(f"近3日累計: {cur_ret3:+.2f}%（歷史第{pct3:.0f}百分位）")
+        lines.append(f"{sign_emoji(cur_ret3)} 近3日累計: {cur_ret3:+.2f}%（歷史第{pct3:.0f}百分位）")
     if cur_ret5 is not None and pct5 is not None:
-        lines.append(f"近5日累計: {cur_ret5:+.2f}%（歷史第{pct5:.0f}百分位）")
+        lines.append(f"{sign_emoji(cur_ret5)} 近5日累計: {cur_ret5:+.2f}%（歷史第{pct5:.0f}百分位）")
     if dev10 is not None:
-        lines.append(f"乖離10日均線: {dev10:+.2f}%　乖離20日均線: {dev20:+.2f}%")
+        lines.append(
+            f"{sign_emoji(dev10)} 乖離10日均線: {dev10:+.2f}%　乖離20日均線: {dev20:+.2f}%"
+        )
     lines.append(f"近3日量能: {vol_trend}")
     if chip:
         sign = "淨多" if chip["net_position"] > 0 else "淨空"
         change_word = "增加" if chip["change"] > 0 else "減少"
+        # 外資空單增加/多單減少＝偏空，用綠色；反之偏多用紅色，跟漲跌方向的紅綠邏輯一致
+        chip_emoji = sign_emoji(chip["change"])
         lines.append(
-            f"外資期貨(TX): {sign}{abs(chip['net_position']):,.0f}口"
+            f"{chip_emoji} 外資期貨(TX): {sign}{abs(chip['net_position']):,.0f}口"
             f"（較前一交易日{change_word}{abs(chip['change']):,.0f}口，{chip['date']}）"
         )
     lines.append("")
