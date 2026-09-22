@@ -1,0 +1,21 @@
+name: 微台夜盤快報
+
+on:
+  schedule:
+    # 台灣時間平日 07:00（UTC 23:00 前一天），夜盤05:00收盤後留2小時緩衝
+    - cron: '0 23 * * 0-4'
+  workflow_dispatch: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python night_session_report.py
+        env:
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
