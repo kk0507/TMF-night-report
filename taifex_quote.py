@@ -5,7 +5,11 @@ import requests
 
 MIS_URL = "https://mis.taifex.com.tw/futures/api/getQuoteList"
 TAIPEI = timezone(timedelta(hours=8))
-STALE_MINUTES = 10  # 資料時間戳跟現在差超過這個，視為盤已休息
+STALE_MINUTES = 20  # 資料時間戳跟現在差超過這個，視為盤已休息
+# 原本設10分鐘，實測發現GitHub Actions排程常常晚個10幾分鐘才真的執行(這是GitHub
+# 已知的行為，schedule時間只是「最早」不是「保證準時」)，導致夜盤05:00收盤的報價
+# 跑到21:17(UTC，該21:05跑)時已經有17分鐘沒更新，被誤判成沒開盤而跳過通知。
+# 放寬到20分鐘，蓋過排程延遲，又不會蓋到最短的午休空檔(1小時15分)。
 
 
 def fetch_session(market_type):
