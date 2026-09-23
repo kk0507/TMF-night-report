@@ -37,6 +37,12 @@ def fetch_session(market_type):
     if not near["CLastPrice"] or not near["CTime"]:
         return None
     ts = datetime.strptime(near["CDate"] + near["CTime"], "%Y%m%d%H%M%S").replace(tzinfo=TAIPEI)
+    if market_type == "1" and ts.hour < 12:
+        # 夜盤跨夜：CDate給的是「這個夜盤屬於哪一天」(session開始的那天)，不是
+        # 真正的日曆日期。凌晨0點後的成交(CTime<12:00)實際發生在CDate的隔天，
+        # 例如CDate=20260923、CTime=004711代表真正時間是2026-09-24 00:47:11，
+        # 不是2026-09-23。沒修正的話凌晨這幾個小時都會被誤判成資料過期24小時。
+        ts += timedelta(days=1)
     return {
         "price": float(near["CLastPrice"]),
         "contract": near["SymbolID"],
