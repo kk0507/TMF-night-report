@@ -1,4 +1,4 @@
-name: 微台價格通知
+name: 微台價格通知＋定時報價
 
 on:
   schedule:
@@ -24,4 +24,5 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet alerts.json || (git add alerts.json && git commit -m "更新alerts.json觸發狀態" && git push)
+          git add alerts.json quote_checkpoints.json
+          git diff --quiet --cached || (git commit -m "更新alerts.json/quote_checkpoints.json狀態" && git push)
