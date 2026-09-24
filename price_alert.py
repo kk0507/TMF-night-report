@@ -41,11 +41,14 @@ def send_discord(text):
     resp.raise_for_status()
 
 
-def side(price, target):
-    return 1 if price >= target else -1
-
-
 def check_price_alerts():
+    """觸價通知：alerts.json每筆是 {id, price, direction: "below"|"above", note, fired}。
+
+    不是看排程當下那一刻的現價，而是看日盤/夜盤「盤中最低/最高點」有沒有到過目標價，
+    這樣排程間隔內一瞬間碰到又彈回去的也抓得到(GitHub排程實測約10~20分鐘才跑一次)。
+    新增通知時要先確認兩個session目前看得到的最低/最高都還沒碰到目標，之後只要碰到就
+    一定是新的觸價，不會被舊資料誤觸發。
+    """
     with open(ALERTS_FILE, "r", encoding="utf-8") as f:
         alerts = json.load(f)
 
@@ -54,32 +57,39 @@ def check_price_alerts():
         print("沒有待觸發的價格通知")
         return
 
-    live = get_live_price()
-    if live is None:
-        print("[價格通知] 現在不在盤中(或資料太舊)，跳過")
+    sessions = [s for s in (fetch_session("0"), fetch_session("1")) if s]
+    if not sessions:
+        print("[價格通知] 查不到報價，跳過")
         return
+    latest = max(sessions, key=lambda s: s["ts"])
+    lows = [s["low"] for s in sessions if s["low"] is not None]
+    highs = [s["high"] for s in sessions if s["high"] is not None]
 
     changed = False
-    for a in alerts:
-        if a.get("fired"):
-            continue
-        cur_side = side(live["price"], a["price"])
-        if cur_side != a["last_side"]:
-            direction = "向上穿越" if cur_side == 1 else "向下穿越"
-            note = f"（{a['note']}）" if a.get("note") else ""
-            send_discord(
-                f"**微台(TMF)價格通知**\n"
-                f"{direction} {a['price']:,.0f} {note}\n"
-                f"現價: {live['price']:,.0f}　合約{live['contract']}　{live['ts'].strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-            a["fired"] = True
-            a["fired_at"] = live["ts"].isoformat()
-            a["fired_price"] = live["price"]
-            changed = True
-            print(f"觸發: {a['id']} @ {a['price']}")
+    for a in active:
+        if a["direction"] == "below" and lows and min(lows) <= a["price"]:
+            hit, extreme, word = True, min(lows), "最低"
+        elif a["direction"] == "above" and highs and max(highs) >= a["price"]:
+            hit, extreme, word = True, max(highs), "最高"
         else:
-            a["last_side"] = cur_side
-            changed = True
+            hit = False
+        if not hit:
+            continue
+        note = f"（{a['note']}）" if a.get("note") else ""
+        arrow = "跌到" if a["direction"] == "below" else "漲到"
+        send_discord(
+            f"**微台(TMF)觸價通知**\n"
+            f"{arrow} {a['price']:,.0f} {note}\n"
+            f"盤中{word}: {extreme:,.0f}　現價: {latest['price']:,.0f}　"
+            f"合約{latest['contract']}　{latest['ts'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"(這是排程偵測，可能比實際碰到晚幾分鐘到十幾分鐘，實際成交以券商為準)"
+        )
+        a["fired"] = True
+        a["fired_at"] = latest["ts"].isoformat()
+        a["fired_price"] = latest["price"]
+        a["extreme_seen"] = extreme
+        changed = True
+        print(f"觸發: {a['id']} @ {a['price']} ({word}{extreme})")
 
     if changed:
         with open(ALERTS_FILE, "w", encoding="utf-8") as f:

@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "id": "close-47500",
+    "price": 47500.0,
+    "direction": "below",
+    "note": "平倉單47,500(空單2口，47,943進場)",
+    "fired": false
+  }
+]
