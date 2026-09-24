@@ -12,27 +12,31 @@
     "price": 47250.0,
     "direction": "below",
     "note": "攤平1：多1口@47,850後第一次攤平(600點間隔)，照計畫買1口",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-09-25 01:2x KK在48,160平倉多單，已無部位，通知作廢"
   },
   {
     "id": "avg2-46650",
     "price": 46650.0,
     "direction": "below",
     "note": "攤平2：第二次也是最後一次攤平，買1口(共3口，均價47,250)",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-09-25 01:2x KK在48,160平倉多單，已無部位，通知作廢"
   },
   {
     "id": "stop-46050",
     "price": 46050.0,
     "direction": "below",
     "note": "全部停損：3口共同停損，最壞約-36,000元，不再加碼",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-09-25 01:2x KK在48,160平倉多單，已無部位，通知作廢"
   },
   {
     "id": "tp-48850",
     "price": 48850.0,
     "direction": "above",
     "note": "停利：多1口@47,850浮盈達10,000元(若已攤平，停利價要改，見日誌)",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-09-25 01:2x KK在48,160平倉多單，已無部位，通知作廢"
   }
 ]
