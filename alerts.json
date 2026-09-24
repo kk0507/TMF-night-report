@@ -4,6 +4,7 @@
     "price": 47500.0,
     "direction": "below",
     "note": "平倉單47,500(空單2口，47,943進場)",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-09-25 KK已在47,850平倉空單，改持多單1口，此通知作廢"
   }
 ]
