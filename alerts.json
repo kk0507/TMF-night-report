@@ -27,5 +27,12 @@
     "direction": "below",
     "note": "全部停損：3口共同停損，最壞約-36,000元，不再加碼",
     "fired": false
+  },
+  {
+    "id": "tp-48850",
+    "price": 48850.0,
+    "direction": "above",
+    "note": "停利：多1口@47,850浮盈達10,000元(若已攤平，停利價要改，見日誌)",
+    "fired": false
   }
 ]
