@@ -1,0 +1,12 @@
+{
+  "equity": 160000,
+  "grid": null,
+  "next_grid": 1,
+  "last_eval": null,
+  "cooldown": 0,
+  "seen": {},
+  "stats": {
+    "round_trips": 0,
+    "stops": 0
+  }
+}
