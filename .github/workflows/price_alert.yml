@@ -27,12 +27,20 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+      - name: 網格模擬交易(影子模式，至2026-10-21)
+        run: python grid_trader.py
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
       - name: 把觸發狀態存回repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          touch paper_state.json paper_trades.csv
+          touch paper_state.json paper_trades.csv grid_state.json grid_trades.csv
           git add alerts.json quote_checkpoints.json
           [ -s paper_state.json ] && git add paper_state.json
           [ -s paper_trades.csv ] && git add paper_trades.csv
+          [ -s grid_state.json ] && git add grid_state.json
+          [ -s grid_trades.csv ] && git add grid_trades.csv
           git diff --quiet --cached || (git commit -m "更新通知/模擬交易狀態" && git pull --rebase -q && git push)
