@@ -1,0 +1,36 @@
+name: 美股收盤通知
+
+on:
+  schedule:
+    # 美股收盤 16:00（美東）＝台北夏令 04:00／冬令 05:00；兩輪都跑，腳本會判斷收盤了沒、同一天只發一次
+    - cron: '25 20 * * 1-5'
+    - cron: '25 21 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "不管收盤了沒、有沒有發過，直接發一次"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python us_close.py ${{ inputs.force && '--force' || '' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      - name: 記錄已發送日期
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          touch us_close_state.json
+          [ -s us_close_state.json ] && git add us_close_state.json
+          git diff --quiet --cached || (git commit -m "美股收盤通知狀態" && git pull --rebase -q && git push)
