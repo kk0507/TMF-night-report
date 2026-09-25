@@ -25,19 +25,20 @@ jobs:
         run: python paper_trader.py
         continue-on-error: true
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # 影子模式訊息走獨立頻道（SHADOW_WEBHOOK_URL）；還沒設定時沿用報價頻道
+          DISCORD_WEBHOOK_URL: ${{ secrets.SHADOW_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL }}
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
       - name: 網格模擬交易(影子模式，至2026-10-21)
         run: python grid_trader.py
         continue-on-error: true
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.SHADOW_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL }}
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
       - name: 反轉影子(A收盤2% vs B盤中1.5%，2026-09-25起)
         run: python reversal_shadow.py
         continue-on-error: true
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.SHADOW_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL }}
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
       - name: 把觸發狀態存回repo
         run: |
