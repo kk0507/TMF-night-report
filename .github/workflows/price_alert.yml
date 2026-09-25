@@ -3,7 +3,12 @@ name: 微台價格通知＋定時報價
 on:
   schedule:
     - cron: '*/5 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test_shadow:
+        description: "發一則測試訊息到影子模式頻道"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -17,6 +22,11 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt
+      - name: 測試影子模式頻道
+        if: inputs.test_shadow == true
+        run: python -c "import paper_trader as pt; pt.notify('✅ 影子模式頻道測試：之後【模擬】【網格模擬】【反轉影子】的訊息都會發到這裡')"
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.SHADOW_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL }}
       - run: python price_alert.py
         continue-on-error: true
         env:
