@@ -1,0 +1,31 @@
+{
+ "_說明": "manual＝非美股事件，tw 為台北時間，confirmed=false 表示日期是推估（公司公布後要改）。us＝美股公司，日期由程式每天從 Nasdaq 抓。tags 對應 HOLDINGS_JSON 裡每檔持股的 t。ref 的數字來自 2022-10 起的統計（持股交易系統/outputs/backtest_score/us_link.py）。",
+ "manual": [
+  {"name": "三星電子 第三季財報初估", "tw": "2026-10-08T07:30", "confirmed": false, "tags": ["memory"],
+   "watch": "營業利益、記憶體部門是否再創高（初估只有總數，細節看月底完整財報）"},
+  {"name": "台積電 第三季法說會", "tw": "2026-10-15T14:00", "confirmed": true, "tags": ["all"],
+   "watch": "AI 需求、CoWoS 產能、明年資本支出與營收成長指引"},
+  {"name": "SK 海力士 第三季財報", "tw": "2026-10-28T08:00", "confirmed": false, "tags": ["memory"],
+   "watch": "HBM 出貨與報價、2027 年供給看法"}
+ ],
+ "us": {
+  "MU": {"name": "美光 財報", "tags": ["memory"], "watch": "DRAM／NAND 報價、下一季營收與毛利率財測、HBM",
+         "ref": "美光一晚跌 5% 以上（48 次）：隔天南亞科平均 -3.2%、華邦電 -2.8%、群聯 -2.6%；漲 5% 以上：南亞科 +3.4%"},
+  "SNDK": {"name": "SanDisk 財報", "tags": ["memory"], "watch": "NAND 報價、企業用 SSD 需求"},
+  "NVDA": {"name": "輝達 財報", "tags": ["ai"], "watch": "資料中心營收、下一季財測、Rubin 出貨進度",
+           "ref": "輝達一晚跌 4% 以上（54 次）：隔天健策平均 -2.1%、奇鋐 -1.7%、南亞科 -1.6%"},
+  "MSFT": {"name": "微軟 財報", "tags": ["ai"], "watch": "資本支出指引（AI 伺服器、記憶體、散熱的最上游需求）"},
+  "GOOGL": {"name": "Google 財報", "tags": ["ai"], "watch": "資本支出指引、自研 TPU"},
+  "AMZN": {"name": "亞馬遜 財報", "tags": ["ai"], "watch": "資本支出指引、AWS 自研晶片（Trainium）"},
+  "META": {"name": "Meta 財報", "tags": ["ai"], "watch": "資本支出指引"},
+  "ORCL": {"name": "甲骨文 財報", "tags": ["ai"], "watch": "雲端訂單積壓、資本支出"},
+  "VRT": {"name": "Vertiv 財報", "tags": ["thermal", "power"], "watch": "液冷與電源訂單、訂單積壓、新接單／出貨比",
+          "ref": "Vertiv 一晚跌 5% 以上（63 次）：隔天奇鋐、雙鴻平均約 -1.9%"},
+  "AVGO": {"name": "博通 財報", "tags": ["ai"], "watch": "AI 客製晶片（ASIC）營收與指引"},
+  "AMD": {"name": "AMD 財報", "tags": ["ai"], "watch": "資料中心 GPU（MI400）出貨"},
+  "QCOM": {"name": "高通 財報", "tags": ["mobile"], "watch": "手機晶片需求"},
+  "COHR": {"name": "Coherent 財報", "tags": ["optical"], "watch": "資料中心光通訊需求"},
+  "LITE": {"name": "Lumentum 財報", "tags": ["optical"], "watch": "資料中心光通訊需求、雷射晶片"},
+  "ETN": {"name": "Eaton 財報", "tags": ["power"], "watch": "資料中心電源訂單"}
+ }
+}

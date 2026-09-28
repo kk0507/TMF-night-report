@@ -1,0 +1,52 @@
+name: 財報提醒
+
+on:
+  schedule:
+    # 台北 20:30：未來 24 小時的財報／法說提醒（週日另發下週清單）
+    - cron: '30 12 * * *'
+    # 台北 07:30：美股公司昨晚公布後的股價反應，趕在台股開盤前
+    - cron: '30 23 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "remind＝提醒、result＝財報反應、test＝只列出事件（不發送）"
+        type: choice
+        options: [test, remind, result]
+        default: test
+      dry:
+        description: "只跑不發送"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: 執行（持股清單只在 secret，程式不會印出）
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE="${{ inputs.mode }}"; DRY="${{ inputs.dry && '--dry' || '' }}"
+          elif [ "${{ github.event.schedule }}" = "30 12 * * *" ]; then
+            MODE=remind; DRY=""
+          else
+            MODE=result; DRY=""
+          fi
+          python earnings_alert.py "$MODE" $DRY
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          HOLDINGS_JSON: ${{ secrets.HOLDINGS_JSON }}
+      - name: 記錄已發送
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          touch earnings_state.json
+          [ -s earnings_state.json ] && git add earnings_state.json
+          git diff --quiet --cached || (git commit -m "財報提醒狀態" && git pull --rebase -q && git push)
