@@ -1,0 +1,41 @@
+{
+  "started": "2026-09-28T18:36:06.944676+08:00",
+  "seen": {
+    "2026-09-24T08:45:00+08:00": {
+      "lo": 47793.0,
+      "ts": "2026-09-24T13:44:59+08:00"
+    },
+    "2026-09-24T15:00:00+08:00": {
+      "lo": 47773.0,
+      "ts": "2026-09-25T04:59:58+08:00"
+    }
+  },
+  "periods": [
+    {
+      "k": 1,
+      "entry_day": "2026-09-16",
+      "settle_day": "2026-10-21",
+      "contract": "TMFJ6",
+      "status": "open",
+      "entry": 46151.0,
+      "stop": 44304.96,
+      "retro": true,
+      "entry_session": "2026-09-16T15:00:00+08:00"
+    },
+    {
+      "k": 2,
+      "entry_day": "2026-10-21",
+      "settle_day": "2026-11-18",
+      "contract": "TMFK6",
+      "status": "pending"
+    },
+    {
+      "k": 3,
+      "entry_day": "2026-11-18",
+      "settle_day": "2026-12-16",
+      "contract": "TMFL6",
+      "status": "pending"
+    }
+  ],
+  "final_sent": false
+}
