@@ -30,6 +30,39 @@ def daily(sym):
             for t, c in zip(j["timestamp"], j["indicators"]["quote"][0]["close"]) if c]
 
 
+SGX = "https://api.sgx.com/derivatives/v1.0"
+
+
+def sgx_twn():
+    """富台期（新加坡 FTSE Taiwan 期貨）：成交量最大的合約、目前價格、每日結算（key＝實際交易日 base-date）。
+    台股休市時它照常交易，是台股最直接的參考。拿不到就回 None，通知照常發。"""
+    try:
+        rows = requests.get(f"{SGX}/contract-code/TWN", params={
+            "order": "asc", "orderby": "delivery-month", "category": "futures",
+            "t": int(datetime.now().timestamp() * 1000)}, headers=H, timeout=20).json()["data"]
+        rows = [r for r in rows if not r["symbol"].endswith("_TAIC")]
+        vol = {}
+        for r in rows:
+            vol[r["symbol"]] = vol.get(r["symbol"], 0) + (r.get("total-volume") or 0)
+        sym = max(vol, key=vol.get)
+        mine = {r["current-trading-session"]: r for r in rows if r["symbol"] == sym}
+        night, day = mine.get("1", {}), mine.get("0", {})
+        if night.get("last-traded-price-abs"):
+            now_px, label = night["last-traded-price-abs"], "夜間盤"
+        else:
+            now_px = day.get("last-traded-price-abs") or day.get("daily-settlement-price-abs")
+            label = "日間盤"
+        hist = requests.get(f"{SGX}/history/symbol/{sym}", params={"days": "1m", "category": "futures"},
+                            headers=H, timeout=20).json()["data"]
+        settle = {h["base-date"]: h["daily-settlement-price-abs"] for h in hist if h.get("daily-settlement-price-abs")}
+        if day.get("daily-settlement-price-abs"):
+            settle[day["base-date"]] = day["daily-settlement-price-abs"]
+        return {"sym": sym, "now": now_px, "label": label, "settle": settle} if now_px else None
+    except Exception as e:  # noqa: BLE001 富台期只是參考，出錯不能擋住通知
+        print("富台期抓取失敗：", e)
+        return None
+
+
 def us_close_time(d):
     return datetime.combine(d, dtime(16, 0), NY)
 
@@ -90,6 +123,17 @@ def main():
             lines.append(f"之後美股累計（{n_days} 個交易日）：" + "、".join(parts))
             lines.append(f"👉 粗估微台下次開盤影響：{lo:+,.0f}～{hi:+,.0f} 點 → 約 {tmf['price'] + lo:,.0f}～{tmf['price'] + hi:,.0f}")
         lines.append("⚠️ 粗估：微台大約是費半漲跌的 0.36 倍、那指的 0.67 倍，約四成的波動解釋不到；殖利率、油價、中東消息也會影響。")
+        # 富台期：結算價在台股日盤收盤時定，所以對「微台最後一次日盤收盤」
+        day = fetch_session("0")
+        twn = sgx_twn() if day else None
+        base = twn and twn["settle"].get(day["ts"].strftime("%Y%m%d"))
+        if base:
+            chg = twn["now"] / base - 1
+            lines.append("━━━━━━━━━━━━")
+            lines.append(f"富台期（新加坡，台股休市照常交易）：{twn['now']:,.2f}（{twn['label']}），"
+                         f"比 {md(day['ts'])} 台股收盤時 {base:,.2f} {chg * 100:+.2f}%")
+            lines.append(f"👉 換算微台：{md(day['ts'])} 日盤收 {day['price']:,.0f} × {1 + chg:.4f} ≈ **{day['price'] * (1 + chg):,.0f}**"
+                         f"（直接交易台股，比美股推算直接；美元計價，匯率會有小誤差）")
 
     msg = "\n".join(lines)
     url = os.environ.get("DISCORD_WEBHOOK_URL")
