@@ -1,2 +1,3 @@
 ﻿time,acct,action,contract,price,ref_price,lots,reason,pnl_points,pnl_ntd,fees,equity
 2026-09-25 16:36,-,START,TMFJ6,,,,B 起始狀態：往下，最低點 47773,,,,
+2026-09-29 20:00,B,BUY,TMFJ6,48349,48349,1,"盤中從低點 47,634 漲回 1.5%",,,30,159970
