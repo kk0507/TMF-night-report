@@ -119,6 +119,23 @@ def yahoo_reaction(sym, e):
     return (post[-1][1] / close - 1) * 100, f"盤後 {post[-1][1]:,.2f}（{post[-1][0]:%H:%M} 美東），收盤 {close:,.2f}"
 
 
+def regular_session(sym, e):
+    """盤後公布的財報：隔天美股正式交易收盤 vs 公布前收盤。回傳 (漲跌%, 說明) 或 None（還沒收盤）。"""
+    d = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
+                     params={"range": "1mo", "interval": "1d"}, headers=H, timeout=20).json()["chart"]["result"][0]
+    daily = [(datetime.fromtimestamp(t, NY).date(), c) for t, c in zip(d["timestamp"], d["indicators"]["quote"][0]["close"]) if c]
+    day = datetime.fromisoformat(e["ny_date"]).date()
+    before = [c for dd, c in daily if dd <= day]
+    after = [(dd, c) for dd, c in daily if dd > day]
+    if not before or not after or datetime.now(NY) < datetime.combine(after[0][0], datetime.min.time(), NY).replace(hour=16, minute=5):
+        return None
+    return (after[0][1] / before[-1] - 1) * 100, f"{after[0][0].month}/{after[0][0].day} 收盤 {after[0][1]:,.2f}（公布前 {before[-1]:,.2f}）"
+
+
+FOLLOW = ("財報後的節奏（2022 年起美光、輝達、Vertiv、SanDisk 共 53 次）：美股本身隔天開盤就反映約 86%，之後沒有固定方向；"
+          "台股相關股慢一拍——第 1 天開盤只反映一部分，第 2 天（美股正式交易之後）才跟上，大約第 5 天後就沒有固定方向。")
+
+
 def send(text, dry):
     url = os.environ.get("DISCORD_WEBHOOK_URL")
     if dry or not url:
@@ -173,12 +190,32 @@ def main():
             lines = [f"**【財報反應】{e['name']}　{pct:+.1f}%**", f"　{how}"]
             hit = affected(e, holdings)
             if hit:
-                lines.append(f"　今天開盤會受影響的持股：{hit}")
+                lines.append(f"　下一個台股開盤會受影響的持股：{hit}")
             if e.get("ref"):
                 lines.append(f"　歷史參考：{e['ref']}")
-            lines.append("　影響大多在台股開盤一次反映，開盤後通常不會再跟著走（2022 年起的統計）。")
+            if e.get("timing") != "bmo":
+                lines.append("　這是盤後價，美股今晚正式交易後可能再變，明天早上 07:30 會再報一次收盤反應。")
+            lines.append(f"　{FOLLOW}")
             send("\n".join(lines), dry)
             sent[f"result|{e['key']}"] = now.isoformat()
+        # 盤後公布的：隔天美股正式交易收盤後再報一次（台股第 2 天才會跟上這一段）
+        later = [e for e in evs if e.get("sym") and e.get("timing") != "bmo" and now - timedelta(hours=48) <= e["when"] < now - timedelta(hours=20)
+                 and f"result|{e['key']}" in sent and f"result2|{e['key']}" not in sent]
+        for e in later:
+            try:
+                got = regular_session(e["sym"], e)
+            except Exception as ex:  # noqa: BLE001
+                print(f"{e['sym']} 收盤抓取失敗：{ex}")
+                continue
+            if not got:
+                continue
+            pct, how = got
+            lines = [f"**【財報反應・第 2 天】{e['name']}　正式交易收盤 {pct:+.1f}%**", f"　{how}"]
+            hit = affected(e, holdings)
+            if hit:
+                lines.append(f"　下一個台股交易日會跟上這一段的持股：{hit}")
+            send("\n".join(lines), dry)
+            sent[f"result2|{e['key']}"] = now.isoformat()
 
     cutoff = (now - timedelta(days=60)).isoformat()
     state["sent"] = {k: v for k, v in sent.items() if v >= cutoff}
