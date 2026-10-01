@@ -55,9 +55,9 @@
    "timing": null
   },
   "SNDK": {
-   "confirmed": false,
-   "d": "2026-11-05",
-   "timing": null
+   "confirmed": true,
+   "d": "2026-10-29",
+   "timing": "amc"
   },
   "VRT": {
    "confirmed": false,
