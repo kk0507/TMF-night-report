@@ -94,13 +94,15 @@
     "price": 48875.0,
     "direction": "above",
     "note": "停利：多2口均價48,375到+500點＝+10,000元",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-10-02 部位已平倉，此通知作廢"
   },
   {
     "id": "stop-47900",
     "price": 47900.0,
     "direction": "below",
     "note": "停損：多2口均價48,375，-475點＝-9,500元。不攤平",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-10-02 部位已平倉，此通知作廢"
   }
 ]
