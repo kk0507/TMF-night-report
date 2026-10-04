@@ -1,0 +1,38 @@
+name: 那指期貨週一開盤通知
+
+on:
+  schedule:
+    # 美股期貨週日 18:00（美東）開盤＝台北夏令週一 06:00／冬令 07:00；排在開盤後 30 分鐘（Yahoo 第一筆是開盤後 10 分鐘、報價再延遲約 10 分鐘）
+    # 三輪都跑，腳本會判斷開盤了沒、同一週只發一次；第三輪（台北 08:20）是前兩輪都失敗時的補發
+    - cron: '30 22 * * 0'
+    - cron: '30 23 * * 0'
+    - cron: '20 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "只跑不發送（印出最近一次週末開盤的樣本）"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python nq_open.py ${{ inputs.dry && '--dry' || '' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      - name: 記錄已發送日期
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          touch nq_open_state.json
+          [ -s nq_open_state.json ] && git add nq_open_state.json
+          git diff --quiet --cached || (git commit -m "那指期貨開盤通知狀態" && git pull --rebase -q && git push)
