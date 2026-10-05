@@ -2,10 +2,6 @@
   "equity": 160000,
   "next_id": 1,
   "position": null,
-  "pending": {
-    "signal": "上突破(收盤>20日高)",
-    "stop_ref": 48087.76,
-    "valid_from": "2026-10-05T15:00:00+08:00"
-  },
+  "pending": null,
   "last_eval": "2026-10-05"
 }
