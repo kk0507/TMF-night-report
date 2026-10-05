@@ -1,25 +1,8 @@
 {
   "equity": 165021.206,
-  "grid": {
-    "id": 4,
-    "contract": "TMFJ6",
-    "anchor": 48666.0,
-    "S": 210,
-    "stop": 48036.0,
-    "armed_at": "2026-10-02T13:47:33.994312+08:00",
-    "levels": [
-      {
-        "level": 48456.0,
-        "filled": null
-      },
-      {
-        "level": 48246.0,
-        "filled": null
-      }
-    ]
-  },
+  "grid": null,
   "next_grid": 5,
-  "last_eval": "2026-10-02",
+  "last_eval": "2026-10-05",
   "cooldown": 0,
   "seen": {
     "2026-10-02T15:00:00+08:00": {
