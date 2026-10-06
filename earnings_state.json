@@ -26,9 +26,9 @@
    "timing": null
   },
   "LITE": {
-   "confirmed": false,
-   "d": "2026-11-03",
-   "timing": null
+   "confirmed": true,
+   "d": "2026-11-05",
+   "timing": "amc"
   },
   "META": {
    "confirmed": false,
