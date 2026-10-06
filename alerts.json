@@ -112,5 +112,21 @@
     "note": "停利掛單 50,400",
     "fired": true,
     "cancelled": "2026-10-06 21:55 掛單已改價，此通知作廢"
+  },
+  {
+    "id": "tp-50250",
+    "price": 50250.0,
+    "direction": "above",
+    "note": "停利掛單 50,250",
+    "armed_at": "2026-10-06T23:19:00+08:00",
+    "fired": false
+  },
+  {
+    "id": "buy-50000",
+    "price": 50000.0,
+    "direction": "below",
+    "note": "買進掛單 50,000",
+    "armed_at": "2026-10-06T23:19:00+08:00",
+    "fired": false
   }
 ]

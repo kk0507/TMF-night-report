@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 MIS_URL = "https://mis.taifex.com.tw/futures/api/getQuoteList"
+MIS_CHART_URL = "https://mis.taifex.com.tw/futures/api/getChartData1M"
 TAIPEI = timezone(timedelta(hours=8))
 STALE_MINUTES = 20  # 資料時間戳跟現在差超過這個，視為盤已休息
 # 原本設10分鐘，實測發現GitHub Actions排程常常晚個10幾分鐘才真的執行(這是GitHub
@@ -53,6 +54,28 @@ def fetch_session(market_type):
         "diff_rate": float(near["CDiffRate"]) if near["CDiffRate"] else 0.0,
         "ts": ts,
     }
+
+
+def fetch_minutes(market_type):
+    """當盤每分鐘的(時間, 最高, 最低)，給「只看某個時間之後有沒有碰到」的觸價通知用。
+
+    時間是那一分鐘K棒的結束時間；夜盤跨夜的日期處理跟fetch_session一樣
+    (CDate是session開始那天，凌晨的K棒要加一天)。查不到回傳None。
+    """
+    s = fetch_session(market_type)
+    if not s:
+        return None
+    resp = requests.post(MIS_CHART_URL, json={"SymbolID": s["contract"]}, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()["RtData"]
+    base = datetime.strptime(data["Quote"]["CDate"], "%Y%m%d").replace(tzinfo=TAIPEI)
+    bars = []
+    for t in data["Ticks"]:
+        ts = base.replace(hour=int(t[0][:2]), minute=int(t[0][2:4]))
+        if market_type == "1" and ts.hour < 12:
+            ts += timedelta(days=1)
+        bars.append((ts, float(t[2]), float(t[3])))
+    return bars
 
 
 def get_live_price():

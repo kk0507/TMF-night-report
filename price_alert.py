@@ -18,11 +18,11 @@ get_live_price()。
 """
 import json
 import os
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timedelta
 
 import requests
 
-from taifex_quote import TAIPEI, fetch_session, get_live_price
+from taifex_quote import TAIPEI, fetch_minutes, fetch_session, get_live_price
 from scheduled_quote import build_message
 
 DISCORD_WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
@@ -48,6 +48,10 @@ def check_price_alerts():
     這樣排程間隔內一瞬間碰到又彈回去的也抓得到(GitHub排程實測約10~20分鐘才跑一次)。
     新增通知時要先確認兩個session目前看得到的最低/最高都還沒碰到目標，之後只要碰到就
     一定是新的觸價，不會被舊資料誤觸發。
+
+    當盤已經碰過目標價、但還是要加通知時，加 "armed_at"(台北時間ISO字串)：這筆只看
+    那個時間之後的每分鐘最高/最低(fetch_minutes)，分鐘資料查不到就這一輪先跳過，不退回
+    用整盤高低(會誤觸發)。
     """
     with open(ALERTS_FILE, "r", encoding="utf-8") as f:
         alerts = json.load(f)
@@ -65,12 +69,25 @@ def check_price_alerts():
     lows = [s["low"] for s in sessions if s["low"] is not None]
     highs = [s["high"] for s in sessions if s["high"] is not None]
 
+    minutes = None
     changed = False
     for a in active:
-        if a["direction"] == "below" and lows and min(lows) <= a["price"]:
-            hit, extreme, word = True, min(lows), "最低"
-        elif a["direction"] == "above" and highs and max(highs) >= a["price"]:
-            hit, extreme, word = True, max(highs), "最高"
+        a_lows, a_highs = lows, highs
+        if a.get("armed_at"):
+            if minutes is None:
+                minutes = load_minutes()
+            if minutes is False:
+                print(f"[價格通知] {a['id']} 有armed_at但分鐘資料查不到，這一輪跳過")
+                continue
+            # K棒時間是那一分鐘的結束；要整根都在設定時間之後才算
+            armed = datetime.fromisoformat(a["armed_at"]) + timedelta(minutes=1)
+            seen = [(h, l) for ts, h, l in minutes if ts >= armed]
+            a_highs = [h for h, _ in seen]
+            a_lows = [l for _, l in seen]
+        if a["direction"] == "below" and a_lows and min(a_lows) <= a["price"]:
+            hit, extreme, word = True, min(a_lows), "最低"
+        elif a["direction"] == "above" and a_highs and max(a_highs) >= a["price"]:
+            hit, extreme, word = True, max(a_highs), "最高"
         else:
             hit = False
         if not hit:
@@ -95,6 +112,21 @@ def check_price_alerts():
         with open(ALERTS_FILE, "w", encoding="utf-8") as f:
             json.dump(alerts, f, ensure_ascii=False, indent=2)
             f.write("\n")
+
+
+def load_minutes():
+    """日盤＋夜盤的分鐘K棒合在一起；任何一邊查不到就回傳False(不拿不完整的資料判斷)。"""
+    try:
+        bars = []
+        for market_type in ("0", "1"):
+            got = fetch_minutes(market_type)
+            if got is None:
+                return False
+            bars += got
+        return bars
+    except Exception as e:
+        print(f"[價格通知] 分鐘資料錯誤: {e!r}")
+        return False
 
 
 def load_checkpoints(today):
