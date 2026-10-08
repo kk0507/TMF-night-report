@@ -2,8 +2,8 @@
   "equity": 158601.6016,
   "grid": null,
   "next_grid": 6,
-  "last_eval": "2026-10-07",
-  "cooldown": 3,
+  "last_eval": "2026-10-08",
+  "cooldown": 2,
   "seen": {
     "2026-10-05T08:45:00+08:00": {
       "lo": 49460.0,
