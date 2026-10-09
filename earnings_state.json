@@ -42,9 +42,9 @@
    "timing": null
   },
   "MSFT": {
-   "confirmed": false,
-   "d": "2026-11-04",
-   "timing": null
+   "confirmed": true,
+   "d": "2026-10-28",
+   "timing": "amc"
   },
   "MU": {
    "confirmed": true,
