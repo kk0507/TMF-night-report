@@ -24,6 +24,8 @@ import requests
 
 TPE, NY = ZoneInfo("Asia/Taipei"), ZoneInfo("America/New_York")
 H = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+BROWSER = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+           "Accept": "text/html,application/xhtml+xml", "Accept-Language": "zh-TW,zh;q=0.9"}
 EVENTS_FILE, STATE_FILE = "earnings_events.json", "earnings_state.json"
 REL_FILE, REL_LATEST = "tw_releases.json", "tw_releases_latest.json"
 WEEK = "一二三四五六日"
@@ -80,16 +82,16 @@ def results_call(when, desc):
 
 
 def holding_conferences(holdings, now):
-    """持股的法說會（不印代號）。回傳 (事件, 抓取失敗的檔數)。"""
-    evs, fail = [], 0
+    """持股的法說會（不印代號）。回傳 (事件, 抓取失敗的狀態碼清單)。"""
+    evs, fail = [], []
     for code, h in holdings.items():
         if code.startswith("00"):  # ETF
             continue
         try:
-            r = requests.get(f"https://poorstock.com/earningcall/{code}", headers={"User-Agent": "Mozilla/5.0"}, timeout=25)
+            r = requests.get(f"https://poorstock.com/earningcall/{code}", headers=BROWSER, timeout=25)
             r.raise_for_status()
-        except Exception:  # noqa: BLE001
-            fail += 1
+        except Exception as ex:  # noqa: BLE001 — 只記狀態碼，網址含代號不能印
+            fail.append(str(getattr(getattr(ex, "response", None), "status_code", None) or type(ex).__name__))
             continue
         t = re.sub(r"<script.*?</script>", "", r.text, flags=re.S)
         t = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", t)))
@@ -309,8 +311,8 @@ def main():
     show = "--show" in sys.argv or not os.environ.get("HOLDINGS_JSON")
     warns = []
     stocks = [c for c in holdings if not c.startswith("00")]
-    if stocks and fail == len(stocks):
-        warns.append(f"持股法說會資料（poorstock）{fail} 檔全部抓不到")
+    if stocks and len(fail) == len(stocks):
+        warns.append(f"持股法說會資料（poorstock）{len(fail)} 檔全部抓不到（{'、'.join(sorted(set(fail)))}）")
     fresh, err = update_releases(now)
     if err:
         warns.append(err)
@@ -333,7 +335,7 @@ def main():
         for e in evs:
             label = e["key"] if show or not e.get("own") else "（持股法說，不印）"
             print(label, fmt_when(e["when"]), "已確認" if e.get("confirmed", True) else "推估")
-        print("持股設定：", "有" if holdings else "沒有", "；持股法說", len(own), "場、抓取失敗", fail, "檔")
+        print("持股設定：", "有" if holdings else "沒有", "；持股法說", len(own), "場、抓取失敗", len(fail), "檔", sorted(set(fail)))
         print("財報快照：新公布", len(fresh), "家；警告", len(warns), "則")
         if show:
             for w in warns:
