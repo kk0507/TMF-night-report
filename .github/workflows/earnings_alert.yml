@@ -47,7 +47,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          for f in earnings_state.json tw_releases.json tw_releases_latest.json; do
+          for f in earnings_state.json tw_releases.json tw_releases_latest.json tw_conferences.json; do
             [ -s "$f" ] && git add "$f"
           done
           git diff --quiet --cached || (git commit -m "財報提醒狀態" && git pull --rebase -q && git push)

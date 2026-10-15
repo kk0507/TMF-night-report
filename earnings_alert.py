@@ -5,8 +5,9 @@
 # 美股公司的日期每天從 Nasdaq 抓（公司公布＝已確認，否則是推估）；非美股（台積電、三星…）寫在 earnings_events.json。
 # 持股只放在 GitHub secret HOLDINGS_JSON（repo 公開，程式和紀錄都不印持股）：{"代號": {"n": "名稱", "t": ["memory", ...]}}
 # 持股自己的財報／法說（2026-10-15 加）：
-#   法說會：每次執行時去 poorstock（轉載公開資訊觀測站）查每檔持股，只留「講剛結束那一季成績」或公司自辦的場次；不寫進任何檔案，
-#           已發送的紀錄用 HMAC 編碼（看不出是哪一檔）。
+#   法說會：公開資訊觀測站（mopsov）全市場這個月＋下個月的法人說明會一覽表，存成 tw_conferences.json（全市場，看不出持股）；
+#           程式裡再挑出持股、只留「講剛結束那一季成績」或公司自辦的場次；已發送的紀錄用 HMAC 編碼（看不出是哪一檔）。
+#           （poorstock 轉載站在 GitHub 機器上會 403，不用。）
 #   財報公布：證交所／櫃買 openapi 的「最新一季累計損益」，全市場存成 tw_releases_latest.json，季別變了＝剛公布，
 #           寫進 tw_releases.json（全市場最近 10 天的新公布，雲端財報整理排程讀它，自己對照戰情室持股）；持股有公布就發 Discord。
 # 需要環境變數：DISCORD_WEBHOOK_URL、HOLDINGS_JSON（沒有就只印出、不列持股）
@@ -27,7 +28,7 @@ H = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 BROWSER = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
            "Accept": "text/html,application/xhtml+xml", "Accept-Language": "zh-TW,zh;q=0.9"}
 EVENTS_FILE, STATE_FILE = "earnings_events.json", "earnings_state.json"
-REL_FILE, REL_LATEST = "tw_releases.json", "tw_releases_latest.json"
+REL_FILE, REL_LATEST, CONF_FILE = "tw_releases.json", "tw_releases_latest.json", "tw_conferences.json"
 WEEK = "一二三四五六日"
 TAG_NAME = {"memory": "記憶體", "thermal": "散熱", "power": "電源／電網", "passive": "被動元件", "optical": "光通訊",
             "mobile": "手機", "ai": "AI 供應鏈", "all": "全體"}
@@ -81,34 +82,69 @@ def results_call(when, desc):
     return rq in found or (rq == 4 and "年度" in desc)
 
 
-def holding_conferences(holdings, now):
-    """持股的法說會（不印代號）。回傳 (事件, 抓取失敗的狀態碼清單)。"""
-    evs, fail = [], []
-    for code, h in holdings.items():
-        if code.startswith("00"):  # ETF
-            continue
-        try:
-            r = requests.get(f"https://poorstock.com/earningcall/{code}", headers=BROWSER, timeout=25)
+def fetch_conferences(now):
+    """公開資訊觀測站「法人說明會一覽表」：全市場（上市＋上櫃）這個月和下個月。回傳 [{code,n,d,t,loc,desc}]。"""
+    out = []
+    months = {(now.year, now.month), ((now + timedelta(days=32)).year, (now + timedelta(days=32)).month)}
+    for y, m in sorted(months):
+        for kind in ("sii", "otc"):
+            r = requests.post("https://mopsov.twse.com.tw/mops/web/ajax_t100sb02_1", headers=BROWSER, timeout=40,
+                              data={"encodeURIComponent": 1, "step": 1, "firstin": 1, "off": 1, "TYPEK": kind,
+                                    "year": y - 1911, "month": f"{m:02d}", "co_id": ""})
             r.raise_for_status()
-        except Exception as ex:  # noqa: BLE001 — 只記狀態碼，網址含代號不能印
-            fail.append(str(getattr(getattr(ex, "response", None), "status_code", None) or type(ex).__name__))
-            continue
-        t = re.sub(r"<script.*?</script>", "", r.text, flags=re.S)
-        t = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", t)))
-        first = {}  # 每一季只留第一場（之後的券商場次通常是重講同一份財報）
-        for d, loc, desc in re.findall(r"日期 (20\d\d/\d\d/\d\d \d\d:\d\d) 地點 (.*?) 相關說明 (.*?) 公司提供的連結", t):
-            when = datetime.strptime(d, "%Y/%m/%d %H:%M").replace(tzinfo=TPE)
-            if not results_call(when, desc):
+            r.encoding = "utf-8"
+            if "法人說明會" not in r.text:
+                raise ValueError("回傳內容不是法說會表格")
+            for row in re.findall(r"<tr[^>]*>(.*?)</tr>", r.text, flags=re.S):
+                tds = [re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", td))).strip()
+                       for td in re.findall(r"<td[^>]*>(.*?)</td>", row, flags=re.S)]
+                if len(tds) < 6 or not re.fullmatch(r"\d{4,6}", tds[0]):
+                    continue
+                dm = re.match(r"(\d{2,3})/(\d{2})/(\d{2})", tds[2])
+                tm = re.match(r"(\d{1,2}):(\d{2})", tds[3])
+                if not dm:
+                    continue
+                out.append({"code": tds[0], "n": tds[1], "d": f"{int(dm[1]) + 1911}-{dm[2]}-{dm[3]}",
+                            "t": f"{int(tm[1]):02d}:{tm[2]}" if tm else "00:00", "loc": tds[4][:40], "desc": tds[5][:200]})
+    return out
+
+
+def update_conferences(now):
+    """全市場法說會存成 tw_conferences.json（留最近 120 天＋未來；全市場資料，看不出持股）。回傳 (清單, 錯誤或 None)。"""
+    old = load(CONF_FILE, {}).get("items", [])
+    try:
+        cur = fetch_conferences(now)
+    except Exception as ex:  # noqa: BLE001
+        return old, f"公開資訊觀測站法說會資料抓取失敗：{type(ex).__name__} {str(ex)[:60]}"
+    keep = (now - timedelta(days=120)).date().isoformat()
+    merged = {(x["code"], x["d"], x["t"]): x for x in old + cur if x["d"] >= keep}
+    items = sorted(merged.values(), key=lambda x: (x["d"], x["t"], x["code"]))
+    with open(CONF_FILE, "w", encoding="utf-8") as f:
+        json.dump({"_說明": "公開資訊觀測站法人說明會一覽表（上市＋上櫃，全市場；d 是開始日期，台北時間）。", "asOf": now.isoformat(timespec="minutes"),
+                   "items": items}, f, ensure_ascii=False, indent=0)
+    return items, None
+
+
+def holding_conferences(holdings, items, now):
+    """持股的法說會（不印代號）：每檔每一季只留第一場講該季成績的（之後的券商場次通常是重講同一份財報）。"""
+    evs = []
+    for code, h in holdings.items():
+        first = {}
+        for x in items:
+            if x["code"] != code:
+                continue
+            when = datetime.fromisoformat(f"{x['d']}T{x['t']}").replace(tzinfo=TPE)
+            if not results_call(when, x["desc"]):
                 continue
             rq = (when.month - 1) // 3 or 4
             q = (when.year - (rq == 4 and when.month <= 3), rq)
             if q not in first or when < first[q][0]:
-                first[q] = (when, d, loc, desc)
-        for when, d, loc, desc in first.values():
+                first[q] = (when, x)
+        for when, x in first.values():
             if when >= now - timedelta(days=2):
-                evs.append({"name": f"{h['n']} 法說會（{loc.strip()[:20]}）", "when": when, "confirmed": True,
-                            "watch": desc.strip()[:120], "own": h["n"], "key": secret_key(f"{code}|{d}")})
-    return evs, fail
+                evs.append({"name": f"{h['n']} 法說會（{x['loc'][:20]}）", "when": when, "confirmed": True,
+                            "watch": x["desc"][:120], "own": h["n"], "key": secret_key(f"{code}|{x['d']}|{x['t']}")})
+    return evs
 
 
 def num(v):
@@ -305,14 +341,15 @@ def main():
     holdings = json.loads(os.environ.get("HOLDINGS_JSON") or "{}")
     now = datetime.now(TPE)
     evs = all_events(cfg, state)
-    own, fail = holding_conferences(holdings, now)
+    items, conf_err = update_conferences(now)
+    own = holding_conferences(holdings, items, now)
     evs = sorted(evs + own, key=lambda e: e["when"])
     sent = state.setdefault("sent", {})
     show = "--show" in sys.argv or not os.environ.get("HOLDINGS_JSON")
     warns = []
     stocks = [c for c in holdings if not c.startswith("00")]
-    if stocks and len(fail) == len(stocks):
-        warns.append(f"持股法說會資料（poorstock）{len(fail)} 檔全部抓不到（{'、'.join(sorted(set(fail)))}）")
+    if conf_err:
+        warns.append(conf_err)
     fresh, err = update_releases(now)
     if err:
         warns.append(err)
@@ -335,7 +372,7 @@ def main():
         for e in evs:
             label = e["key"] if show or not e.get("own") else "（持股法說，不印）"
             print(label, fmt_when(e["when"]), "已確認" if e.get("confirmed", True) else "推估")
-        print("持股設定：", "有" if holdings else "沒有", "；持股法說", len(own), "場、抓取失敗", len(fail), "檔", sorted(set(fail)))
+        print("持股設定：", "有" if holdings else "沒有", "；持股法說", len(own), "場；全市場法說", len(items), "筆")
         print("財報快照：新公布", len(fresh), "家；警告", len(warns), "則")
         if show:
             for w in warns:
