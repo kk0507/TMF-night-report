@@ -4,7 +4,15 @@
 #   result（每天台北 07:30）：美股公司昨晚公布後的股價反應（盤後價），趕在台股 09:00 開盤前。
 # 美股公司的日期每天從 Nasdaq 抓（公司公布＝已確認，否則是推估）；非美股（台積電、三星…）寫在 earnings_events.json。
 # 持股只放在 GitHub secret HOLDINGS_JSON（repo 公開，程式和紀錄都不印持股）：{"代號": {"n": "名稱", "t": ["memory", ...]}}
+# 持股自己的財報／法說（2026-10-15 加）：
+#   法說會：每次執行時去 poorstock（轉載公開資訊觀測站）查每檔持股，只留「講剛結束那一季成績」或公司自辦的場次；不寫進任何檔案，
+#           已發送的紀錄用 HMAC 編碼（看不出是哪一檔）。
+#   財報公布：證交所／櫃買 openapi 的「最新一季累計損益」，全市場存成 tw_releases_latest.json，季別變了＝剛公布，
+#           寫進 tw_releases.json（全市場最近 10 天的新公布，雲端財報整理排程讀它，自己對照戰情室持股）；持股有公布就發 Discord。
 # 需要環境變數：DISCORD_WEBHOOK_URL、HOLDINGS_JSON（沒有就只印出、不列持股）
+import hashlib
+import hmac
+import html
 import json
 import os
 import re
@@ -17,6 +25,7 @@ import requests
 TPE, NY = ZoneInfo("Asia/Taipei"), ZoneInfo("America/New_York")
 H = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 EVENTS_FILE, STATE_FILE = "earnings_events.json", "earnings_state.json"
+REL_FILE, REL_LATEST = "tw_releases.json", "tw_releases_latest.json"
 WEEK = "一二三四五六日"
 TAG_NAME = {"memory": "記憶體", "thermal": "散熱", "power": "電源／電網", "passive": "被動元件", "optical": "光通訊",
             "mobile": "手機", "ai": "AI 供應鏈", "all": "全體"}
@@ -52,6 +61,146 @@ def release_tw(d, timing):
     return datetime(d.year, d.month, d.day, hh, mm, tzinfo=NY).astimezone(TPE)
 
 
+def secret_key(name):
+    """持股相關的已發送紀錄：用 webhook 當 HMAC 金鑰，公開 repo 看不出是哪一檔。"""
+    k = (os.environ.get("DISCORD_WEBHOOK_URL") or "local").encode()
+    return "h:" + hmac.new(k, name.encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def results_call(when, desc):
+    """這場法說是不是在講「剛結束那一季」的成績（或公司自辦）；券商論壇只講營運概況的不算。"""
+    if "自辦" in desc or "召開法人說明會" in desc:
+        return True
+    rq = (when.month - 1) // 3 or 4  # 10～12 月講 Q3、1～3 月講去年 Q4
+    qs = {"一": 1, "二": 2, "三": 3, "四": 4}
+    found = {int(x) if x.isdigit() else qs[x] for x in re.findall(r"第\s*([1-4一二三四])\s*季", desc)}
+    for a, b in re.findall(r"([1-4])Q\d\d|Q([1-4])", desc):
+        found.add(int(a or b))
+    return rq in found or (rq == 4 and "年度" in desc)
+
+
+def holding_conferences(holdings, now):
+    """持股的法說會（不印代號）。回傳 (事件, 抓取失敗的檔數)。"""
+    evs, fail = [], 0
+    for code, h in holdings.items():
+        if code.startswith("00"):  # ETF
+            continue
+        try:
+            r = requests.get(f"https://poorstock.com/earningcall/{code}", headers={"User-Agent": "Mozilla/5.0"}, timeout=25)
+            r.raise_for_status()
+        except Exception:  # noqa: BLE001
+            fail += 1
+            continue
+        t = re.sub(r"<script.*?</script>", "", r.text, flags=re.S)
+        t = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", t)))
+        first = {}  # 每一季只留第一場（之後的券商場次通常是重講同一份財報）
+        for d, loc, desc in re.findall(r"日期 (20\d\d/\d\d/\d\d \d\d:\d\d) 地點 (.*?) 相關說明 (.*?) 公司提供的連結", t):
+            when = datetime.strptime(d, "%Y/%m/%d %H:%M").replace(tzinfo=TPE)
+            if not results_call(when, desc):
+                continue
+            rq = (when.month - 1) // 3 or 4
+            q = (when.year - (rq == 4 and when.month <= 3), rq)
+            if q not in first or when < first[q][0]:
+                first[q] = (when, d, loc, desc)
+        for when, d, loc, desc in first.values():
+            if when >= now - timedelta(days=2):
+                evs.append({"name": f"{h['n']} 法說會（{loc.strip()[:20]}）", "when": when, "confirmed": True,
+                            "watch": desc.strip()[:120], "own": h["n"], "key": secret_key(f"{code}|{d}")})
+    return evs, fail
+
+
+def num(v):
+    try:
+        return float(str(v).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def fetch_releases():
+    """全市場（上市＋上櫃）最新一季的累計損益；營收、利益單位是千元。"""
+    out = {}
+    for x in requests.get("https://openapi.twse.com.tw/v1/opendata/t187ap14_L", headers=H, timeout=60).json():
+        out[x["公司代號"]] = {"n": x["公司名稱"], "q": f"{x['年度']}Q{x['季別']}", "eps": num(x["基本每股盈餘(元)"]),
+                            "rev": num(x["營業收入"]), "op": num(x["營業利益"]), "ni": num(x["稅後淨利"])}
+    for x in requests.get("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O", headers=H, timeout=60).json():
+        out[x["SecuritiesCompanyCode"]] = {"n": x["CompanyName"], "q": f"{x['Year']}Q{x['季別']}", "eps": num(x["基本每股盈餘"]),
+                                           "rev": num(x["營業收入"]), "op": num(x["營業利益"]), "ni": num(x["稅後淨利"])}
+    return out
+
+
+def qkey(q):
+    y, n = q.split("Q")
+    return int(y), int(n)
+
+
+def update_releases(now):
+    """更新全市場快照，回傳 (這次新公布的清單, 錯誤訊息或 None)。第一次跑只建快照、不算新公布。"""
+    latest = load(REL_LATEST, {}).get("latest", {})
+    try:
+        cur = fetch_releases()
+    except Exception as ex:  # noqa: BLE001
+        return [], f"證交所／櫃買財報資料抓取失敗：{ex}"
+    if len(cur) < 1500:
+        return [], f"證交所／櫃買財報資料只有 {len(cur)} 家，可能改版"
+    fresh = []
+    for code, x in cur.items():
+        old = latest.get(code)
+        if not old or qkey(x["q"]) <= qkey(old["q"]):
+            if old and x["q"] == old["q"]:
+                x["epsQ"] = old.get("epsQ")
+            continue
+        (y, n), (oy, on) = qkey(x["q"]), qkey(old["q"])
+        item = {"code": code, "n": x["n"], "q": x["q"], "seen": now.isoformat(timespec="minutes"), "eps": x["eps"]}
+        if n == 1 or (y == oy and n == on + 1):  # 單季＝累計相減（第 1 季就是累計本身）
+            base = {"eps": 0, "rev": 0, "op": 0, "ni": 0} if n == 1 else old
+            for k in ("eps", "rev", "op", "ni"):
+                if x[k] is not None and base.get(k) is not None:
+                    item[k + "Q"] = round(x[k] - base[k], 2)
+            x["epsQ"] = item.get("epsQ")
+        item["prevEpsQ"] = old.get("epsQ")
+        fresh.append(item)
+    if not latest:
+        fresh = []
+    rel = load(REL_FILE, {"new": []})
+    cutoff = (now - timedelta(days=10)).isoformat(timespec="minutes")
+    rel = {"_說明": "全市場（上市＋上櫃）最近 10 天新公布的季報（證交所 t187ap14_L、櫃買 mopsfin_t187ap14_O；seen＝程式第一次看到的台北時間，"
+                    "eps＝年初累計，epsQ／revQ／opQ／niQ＝單季（營收與利益單位千元），prevEpsQ＝上一季單季）。",
+           "asOf": now.isoformat(timespec="minutes"),
+           "new": [i for i in rel.get("new", []) if i["seen"] >= cutoff] + fresh}
+    with open(REL_FILE, "w", encoding="utf-8") as f:
+        json.dump(rel, f, ensure_ascii=False, indent=1)
+    with open(REL_LATEST, "w", encoding="utf-8") as f:
+        json.dump({"asOf": now.isoformat(timespec="minutes"), "latest": {**latest, **cur}}, f, ensure_ascii=False, separators=(",", ":"))
+    return fresh, None
+
+
+def expected_q(now):
+    """法定期限過了之後，每家公司至少該有的季別（一般業：Q1 5/15、Q2 8/14、Q3 11/14、年報 3/31）。"""
+    y, md = now.year - 1911, (now.month, now.day)
+    if md > (11, 14):
+        return f"{y}Q3"
+    if md > (8, 14):
+        return f"{y}Q2"
+    if md > (5, 15):
+        return f"{y}Q1"
+    return f"{y - 1}Q4" if md > (3, 31) else f"{y - 1}Q3"
+
+
+def release_lines(item):
+    y, n = qkey(item["q"])
+    lines = [f"**【持股財報公布】{item['n']}　{y} 年第 {n} 季**"]
+    if item.get("epsQ") is not None:
+        prev = f"（上一季 {item['prevEpsQ']:g}）" if item.get("prevEpsQ") is not None else ""
+        lines.append(f"　單季 EPS {item['epsQ']:g}{prev}；年初累計 {item['eps']:g}")
+    else:
+        lines.append(f"　年初累計 EPS {item['eps']:g}")
+    if item.get("revQ"):
+        op = f"、營益率 {item['opQ'] / item['revQ'] * 100:.1f}%" if item.get("opQ") is not None else ""
+        lines.append(f"　單季營收 {item['revQ'] / 1e5:,.1f} 億{op}")
+    lines.append("　數字是公司申報的合併報表（證交所／櫃買）；戰情室的財報整理由早上 07:30 的排程寫。")
+    return lines
+
+
 def all_events(cfg, state):
     evs = []
     for e in cfg["manual"]:
@@ -72,6 +221,8 @@ def all_events(cfg, state):
 
 
 def affected(e, holdings):
+    if e.get("own"):
+        return e["own"]
     tags = set(e.get("tags", []))
     hit = [h["n"] for c, h in holdings.items() if "all" in tags or tags & set(h.get("t", []))]
     return "、".join(hit)
@@ -152,12 +303,41 @@ def main():
     holdings = json.loads(os.environ.get("HOLDINGS_JSON") or "{}")
     now = datetime.now(TPE)
     evs = all_events(cfg, state)
+    own, fail = holding_conferences(holdings, now)
+    evs = sorted(evs + own, key=lambda e: e["when"])
     sent = state.setdefault("sent", {})
+    show = "--show" in sys.argv or not os.environ.get("HOLDINGS_JSON")
+    warns = []
+    stocks = [c for c in holdings if not c.startswith("00")]
+    if stocks and fail == len(stocks):
+        warns.append(f"持股法說會資料（poorstock）{fail} 檔全部抓不到")
+    fresh, err = update_releases(now)
+    if err:
+        warns.append(err)
+    for item in fresh:
+        k = secret_key(f"rel|{item['code']}|{item['q']}")
+        if item["code"] in holdings and k not in sent:
+            send("\n".join(release_lines({**item, "n": holdings[item["code"]]["n"]})), dry)
+            sent[k] = now.isoformat()
+    exp = expected_q(now)
+    latest = load(REL_LATEST, {}).get("latest", {})
+    late = [holdings[c]["n"] for c in stocks if latest and (c not in latest or qkey(latest[c]["q"]) < qkey(exp))]
+    if late and secret_key(f"late|{exp}") not in sent and mode != "test":
+        warns.append(f"法定期限過了，這幾檔在證交所／櫃買資料裡還沒有 {exp}：{'、'.join(late)}（可能是資料源沒更新，偵測可能失靈）")
+        sent[secret_key(f"late|{exp}")] = now.isoformat()
+    if warns and mode != "test" and f"warn|{now.date()}" not in sent:
+        send("**【財報提醒程式】要注意**\n" + "\n".join(f"• {w}" for w in warns), dry)
+        sent[f"warn|{now.date()}"] = now.isoformat()
 
     if mode == "test":
         for e in evs:
-            print(e["key"], fmt_when(e["when"]), "已確認" if e.get("confirmed", True) else "推估")
-        print("持股設定：", "有" if holdings else "沒有")
+            label = e["key"] if show or not e.get("own") else "（持股法說，不印）"
+            print(label, fmt_when(e["when"]), "已確認" if e.get("confirmed", True) else "推估")
+        print("持股設定：", "有" if holdings else "沒有", "；持股法說", len(own), "場、抓取失敗", fail, "檔")
+        print("財報快照：新公布", len(fresh), "家；警告", len(warns), "則")
+        if show:
+            for w in warns:
+                print(" ", w)
     elif mode == "remind":
         soon = [e for e in evs if now < e["when"] <= now + timedelta(hours=24) and f"remind|{e['key']}" not in sent]
         if soon:

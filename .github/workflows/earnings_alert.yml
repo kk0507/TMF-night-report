@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "remind＝提醒、result＝財報反應、test＝只列出事件（不發送）"
+        description: "remind＝提醒、result＝財報反應、test＝只列出事件（不發送；會建立／更新全市場財報快照）"
         type: choice
         options: [test, remind, result]
         default: test
@@ -47,6 +47,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          touch earnings_state.json
-          [ -s earnings_state.json ] && git add earnings_state.json
+          for f in earnings_state.json tw_releases.json tw_releases_latest.json; do
+            [ -s "$f" ] && git add "$f"
+          done
           git diff --quiet --cached || (git commit -m "財報提醒狀態" && git pull --rebase -q && git push)
