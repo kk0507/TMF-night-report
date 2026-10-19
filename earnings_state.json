@@ -13,9 +13,9 @@
    "timing": "amc"
   },
   "AMZN": {
-   "confirmed": false,
+   "confirmed": true,
    "d": "2026-10-29",
-   "timing": null
+   "timing": "amc"
   },
   "AVGO": {
    "confirmed": false,
