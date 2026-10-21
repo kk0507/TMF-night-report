@@ -1,5 +1,6 @@
 {
  "sent": {
+  "remind|META|2026-10-21": "2026-10-21T21:15:13.620553+08:00",
   "remind|MU|2026-09-30": "2026-09-30T20:50:11.016719+08:00",
   "remind|三星電子 第三季財報初估|2026-10-08": "2026-10-07T20:51:24.226491+08:00",
   "remind|台積電 第三季法說會|2026-10-15": "2026-10-14T21:09:15.146750+08:00",
@@ -28,9 +29,9 @@
    "timing": "amc"
   },
   "ETN": {
-   "confirmed": false,
+   "confirmed": true,
    "d": "2026-11-03",
-   "timing": null
+   "timing": "bmo"
   },
   "GOOGL": {
    "confirmed": true,
@@ -68,9 +69,9 @@
    "timing": null
   },
   "QCOM": {
-   "confirmed": false,
+   "confirmed": true,
    "d": "2026-11-04",
-   "timing": null
+   "timing": "amc"
   },
   "SNDK": {
    "confirmed": true,
