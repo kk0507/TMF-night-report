@@ -1,2 +1,3 @@
 ﻿time,period,action,contract,price,stop,reason,pnl_points,mtx_ntd,tmf_ntd
 2026-09-28 18:36,1,BUY,TMFJ6,46151,44305,追溯：9/16 結算夜盤開盤（FinMind）,,,
+2026-10-21 13:40,1,SETTLE,TMFJ6,46650,,抱到結算，用最後結算價,+499,+24950,+4990
