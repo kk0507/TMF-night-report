@@ -137,6 +137,7 @@
     "direction": "above",
     "note": "掛賣 50,000（多 2 口）",
     "armed_at": "2026-10-07T22:41:00+08:00",
-    "fired": false
+    "fired": true,
+    "cancelled": "2026-10-21 10 月合約已結算，此通知作廢"
   }
 ]
