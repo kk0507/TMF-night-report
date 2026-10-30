@@ -77,9 +77,9 @@
    "timing": null
   },
   "NVDA": {
-   "confirmed": false,
-   "d": "2026-11-18",
-   "timing": null
+   "confirmed": true,
+   "d": "2026-11-17",
+   "timing": "amc"
   },
   "ORCL": {
    "confirmed": false,
