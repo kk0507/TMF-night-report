@@ -1,6 +1,6 @@
 {
-  "date": "2026-10-31",
-  "day_close": false,
+  "date": "2026-11-02",
+  "day_close": true,
   "night_check": false,
-  "night_close": true
+  "night_close": false
 }
