@@ -1,7 +1,8 @@
 # python reversal_shadow.py -> 反轉規則影子模式：A「收盤 2%」vs B「盤中 1.5%」，各 1 口虛擬單，每筆記到 rev_trades.csv
 # 需要環境變數：FINMIND_TOKEN, DISCORD_WEBHOOK_URL
 """目的：驗證「盤中碰到就算（B）」在真實盤中價格下，是不是真的比「等收盤（A）」早進場、多賺。只做多。
-2026-09-25 起跑、沒有結束日（KK 說停才停）；10/21 十月合約結算時出第一次報告。
+2026-09-25 起跑；10/21 十月合約結算時出第一次報告。KK 10/24：跑到微台 12 月合約——12/15（結算前一天）
+收盤平倉後結束，發總結到影子頻道，12/16 結算後再出結算報告。
 
 規則（開跑前定案，期間不改）：
 A 收盤 2%：規則同 reversal_watch.py——日盤收盤比「最近最低收盤」漲回 2% ＝開始往上 → 當晚夜盤開盤價虛擬買進；
@@ -28,6 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE = os.path.join(HERE, "rev_state.json")
 LEDGER_FILE = os.path.join(HERE, "rev_trades.csv")
 START_DATE = date(2026, 9, 25)
+END_CONTRACT = "TMFL6"   # 12 月合約：結算前一天收盤平倉後結束
 TH_A, TH_B = 0.02, 0.015
 MONTHS = "ABCDEFGHIJKL"
 FIELDS = ["time", "acct", "action", "contract", "price", "ref_price", "lots", "reason", "pnl_points", "pnl_ntd", "fees", "equity"]
@@ -246,6 +248,11 @@ def day_eval(st, now):
                 notify(acct, [sell(st, acct, close, close, now, "結算前一天收盤換月平倉")], st)
             st[acct]["pending"] = None
         st["B"]["paused"] = True
+        if code == END_CONTRACT:
+            st["ended"] = now.isoformat()
+            ledger({"time": stamp(now), "acct": "-", "action": "END", "contract": code, "reason": "12 月合約結算前一天收盤，影子結束"})
+            final_summary(st)
+            return
         if tb["contract"] != code:
             # 已經是新合約：換過去，B 從頭算
             st["contract"] = tb["contract"]
@@ -273,6 +280,16 @@ def day_eval(st, now):
         high = bars[last["from_i"]]["close"]
         notify("A", [f"今天收 {fmt(tb['close'])}，比進場後最高收盤 {fmt(high)} 跌了 2%＝漲完了 → 今晚夜盤開盤虛擬賣出"], st)
         ledger({"time": stamp(now), "acct": "A", "action": "SIGNAL", "contract": code, "ref_price": f"{tb['close']:.0f}", "reason": "收盤跌2%"})
+
+
+def final_summary(st):
+    lines = ["**【反轉影子｜結束】** 跑到 12 月合約結算前一天，兩個帳戶都已平倉。"]
+    for acct in ("A", "B"):
+        tr = st[acct]["trades"]
+        net = sum(t["net"] for t in tr)
+        lines.append(f"{NAMES[acct]}：完成 {len(tr)} 筆，賺 {sum(1 for t in tr if t['net'] > 0)} 筆，"
+                     f"淨損益 {net:+,.0f} 元，帳戶 {fmt(st[acct]['equity'])}")
+    pt.notify("\n".join(lines))
 
 
 def restart_b(st):
@@ -318,6 +335,8 @@ def main(now=None):
     if now.date() < START_DATE:
         return
     st = load_state() or init_state(now)
+    if st.get("ended"):
+        return
     fill_a_pending(st, now)
     if st["B"].get("restart"):
         restart_b(st)
