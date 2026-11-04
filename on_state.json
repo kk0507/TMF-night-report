@@ -1,10 +1,12 @@
 {
   "started": "2026-11-04T05:31:28.080457+08:00",
-  "decided": [],
+  "decided": [
+    "2026-11-04"
+  ],
   "pos": null,
   "trades": [],
   "period_pnl": {},
-  "skips": 0,
+  "skips": 1,
   "weekly": [],
   "final_sent": false
 }
