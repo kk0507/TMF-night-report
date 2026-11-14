@@ -6,7 +6,10 @@
 規則（開跑前定案，期間不改）：
 - 決定時間＝每個交易日 13:45 日盤收盤。原版 13:43:30 送單，收盤集合競價成交＝收盤價，影子用當天日盤收盤價。
 - 買：週一～三；週五要收在 5 日線上（同一個合約、日盤收盤、含今天）；週四不買；
-  下一個交易日離今天超過 4 天不買（連假前）；ATR14 × 0.75 > 1,000 點不買（日盤＋夜盤合併一根，含跳空）。
+  下一個交易日離今天超過 4 天不買（連假前）。
+  ※ 11/14 KK：「影子不用這個過濾」→ 拿掉「ATR14 × 0.75 > 1,000 點不買」（日盤＋夜盤合併一根，含跳空）。
+    ATR 照樣算、照樣記；原本會被擋的單標 atr_over，週報／結算並排「有過濾／沒過濾」。
+    11/4～11/13 被擋的單照當時 13:45 收盤、隔天 09:00 那一分鐘（期交所逐筆轉 1 分 K）補登。
 - 賣：下一個交易日 09:00（開盤後第 3 根 5 分 K 收盤），也記 08:45 開盤價對照。不掛停損。
 - 每期（結算到結算）虧損上限 15,000 元：KK 的規則是跟他自己的單共用，影子看不到他的單，只算影子自己的。
 - 一次 1 口，成本一趟 78 元（KK 券商明細推的：手續費 40＋期交稅＋滑價各 1 點）。
@@ -177,21 +180,24 @@ def decide(st, d, now):
         why = "週四不做"
     elif (nd - d).days > 4:
         why = f"下一個交易日 {nd.month}/{nd.day} 離今天超過 4 天（連假前）"
-    elif atr is not None and atr * 0.75 > ATR_LIMIT:
-        why = f"波動太大：ATR14 {fmt(atr)} × 0.75 ＝ {fmt(atr * 0.75)} > 1,000 點"
     elif d.weekday() == 4 and today["c"] <= ma5:
         why = f"週五沒站上 5 日線（收 {fmt(today['c'])}，5 日線 {fmt(ma5)}）"
     elif used <= PERIOD_LIMIT:
         why = f"這一期影子已虧 {fmt(used)} 元，到上限 15,000，停到下一期"
     base = {"time": now.strftime("%Y-%m-%d %H:%M"), "date": d.isoformat(), "contract": code, "price": f"{today['c']:.0f}",
             "atr14": f"{atr:.0f}" if atr else "", "ma5": f"{ma5:.0f}"}
+    over = bool(atr is not None and atr * 0.75 > ATR_LIMIT)  # 舊規則（波動過濾）會跳過；11/14 起只記不擋
     info = f"ATR14 {fmt(atr)}（×0.75＝{fmt(atr * 0.75)}）" if atr else "ATR14 算不出來"
+    if over:
+        info += "｜舊規則（波動過濾）會跳過"
     if why:
         ledger({**base, "action": "SKIP", "reason": why})
         pt.notify(f"{TAG} {d.month}/{d.day}（{'一二三四五'[d.weekday()]}）不買：{why}\n收盤 {fmt(today['c'])}｜{info}")
     else:
-        st["pos"] = {"date": d.isoformat(), "sell_day": nd.isoformat(), "code": code, "cm": cm, "entry": today["c"]}
-        ledger({**base, "action": "BUY", "reason": "13:45 收盤價虛擬買進 1 口"})
+        st["pos"] = {"date": d.isoformat(), "sell_day": nd.isoformat(), "code": code, "cm": cm, "entry": today["c"],
+                     "atr_over": over}
+        ledger({**base, "action": "BUY",
+                "reason": "13:45 收盤價虛擬買進 1 口" + ("（ATR×0.75 > 1,000，舊規則會跳過）" if over else "")})
         pt.notify(f"{TAG} {d.month}/{d.day}（{'一二三四五'[d.weekday()]}）虛擬買進 {code} 1 口 @{fmt(today['c'])}（日盤收盤）\n"
                   f"{info}｜不掛停損｜{nd.month}/{nd.day} 09:00 賣｜這一期影子累計 {used:+,.0f} 元")
     st["decided"].append(d.isoformat())
@@ -212,7 +218,8 @@ def try_sell(st, now):
     per = period_of(date.fromisoformat(p["date"]))
     st["period_pnl"][per] = st["period_pnl"].get(per, 0) + ntd
     st["trades"].append({"buy": p["date"], "sell": p["sell_day"], "entry": p["entry"], "exit": px, "ntd": ntd,
-                         "open_ntd": (op - p["entry"]) * PV - COST_NTD if op else None})
+                         "open_ntd": (op - p["entry"]) * PV - COST_NTD if op else None,
+                         "atr_over": p.get("atr_over", False)})
     note = "" if px9 is not None else "（09:00 那一分鐘沒抓到，用 08:45 開盤價）"
     ledger({"time": now.strftime("%Y-%m-%d %H:%M"), "date": p["sell_day"], "action": "SELL", "contract": p["code"],
             "price": f"{px:.0f}", "price_0845": f"{op:.0f}" if op else "", "reason": "09:00 虛擬賣出" + note,
@@ -233,9 +240,13 @@ def summary(st, title):
         eq += x["ntd"]; peak = max(peak, eq); dd = min(dd, eq - peak)
     win = sum(1 for x in t if x["ntd"] > 0)
     op = [x["open_ntd"] for x in t if x["open_ntd"] is not None]
+    ov = [x["ntd"] for x in t if x.get("atr_over")]
+    filt = (f"其中舊規則（波動過濾）會跳過的 {len(ov)} 筆合計 {sum(ov):+,.0f} 元；有過濾的版本是 {eq - sum(ov):+,.0f} 元\n"
+            if ov else "")
     return (f"{TAG} {title}\n{len(t)} 筆、賺 {win} 筆（{win / len(t):.0%}）、累計 {eq:+,.0f} 元、最大回落 {dd:,.0f} 元、"
             f"最好 {max(x['ntd'] for x in t):+,.0f}／最差 {min(x['ntd'] for x in t):+,.0f}\n"
             + (f"如果都在 08:45 開盤賣：{sum(op):+,.0f} 元（{len(op)} 筆）\n" if op else "")
+            + filt
             + f"不買的日子 {st['skips']} 天。回測（2020～2025/10，同規則、45,000 點換算）每年平均約 +5 萬、最大回落約 −6.7 萬；"
             "幾週的樣本只能看實際跟回測有沒有落差，不能當結論。")
 
