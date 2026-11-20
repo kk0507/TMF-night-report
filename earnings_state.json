@@ -122,9 +122,9 @@
    "timing": "amc"
   },
   "ORCL": {
-   "confirmed": false,
-   "d": "2026-12-09",
-   "timing": null
+   "confirmed": true,
+   "d": "2026-12-14",
+   "timing": "amc"
   },
   "QCOM": {
    "confirmed": true,
