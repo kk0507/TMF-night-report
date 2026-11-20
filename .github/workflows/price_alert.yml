@@ -67,6 +67,9 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.SHADOW_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL }}
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+      - name: 存1分K(每盤收盤後存一次，minute_k/，給之後回測用)
+        run: python minute_archive.py
+        continue-on-error: true
       - name: 把觸發狀態存回repo
         run: |
           git config user.name "github-actions[bot]"
@@ -83,4 +86,5 @@ jobs:
           [ -s roll_trades.csv ] && git add roll_trades.csv
           [ -s on_state.json ] && git add on_state.json
           [ -s on_trades.csv ] && git add on_trades.csv
+          [ -d minute_k ] && git add minute_k
           git diff --quiet --cached || (git commit -m "更新通知/模擬交易狀態" && git pull --rebase -q && git push)
