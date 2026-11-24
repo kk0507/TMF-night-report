@@ -112,9 +112,9 @@
    "timing": "amc"
   },
   "MU": {
-   "confirmed": false,
-   "d": "2026-12-16",
-   "timing": null
+   "confirmed": true,
+   "d": "2026-12-17",
+   "timing": "amc"
   },
   "NVDA": {
    "confirmed": true,
